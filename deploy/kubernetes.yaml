@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: storycast-config}
+data:
+  DATABASE_URL: postgresql+psycopg://storycast:storycast@postgres.example.internal:5432/storycast
+  REDIS_URL: redis://redis.example.internal:6379/0
+  CELERY_BROKER_URL: redis://redis.example.internal:6379/0
+  CELERY_RESULT_BACKEND: redis://redis.example.internal:6379/1
+  STORAGE_PROVIDER: s3
+  S3_BUCKET: storycast-media
+  TTS_PROVIDER: huggingface
+  VIDEO_PROVIDER: huggingface
+---
+apiVersion: batch/v1
+kind: Job
+metadata: {name: storycast-migrate}
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/your-org/storycast:latest
+          command: [alembic, upgrade, head]
+          envFrom: [{configMapRef: {name: storycast-config}}, {secretRef: {name: storycast-secrets}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: storycast-api}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: storycast-api}}
+  template:
+    metadata: {labels: {app: storycast-api}}
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/your-org/storycast:latest
+          ports: [{containerPort: 8000}]
+          envFrom: [{configMapRef: {name: storycast-config}}, {secretRef: {name: storycast-secrets}}]
+          readinessProbe: {httpGet: {path: /health, port: 8000}, initialDelaySeconds: 5}
+          resources: {requests: {cpu: 250m, memory: 512Mi}, limits: {cpu: "1", memory: 2Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: storycast-api}
+spec: {selector: {app: storycast-api}, ports: [{port: 80, targetPort: 8000}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: storycast-workers}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: storycast-workers}}
+  template:
+    metadata: {labels: {app: storycast-workers}}
+    spec:
+      containers:
+        - name: collection
+          image: ghcr.io/your-org/storycast:latest
+          command: [celery, -A, app.tasks.celery_app.celery_app, worker, -Q, collection, --loglevel=INFO, --concurrency=2]
+          envFrom: [{configMapRef: {name: storycast-config}}, {secretRef: {name: storycast-secrets}}]
+        - name: generation
+          image: ghcr.io/your-org/storycast:latest
+          command: [celery, -A, app.tasks.celery_app.celery_app, worker, -Q, generation, --loglevel=INFO, --concurrency=2]
+          envFrom: [{configMapRef: {name: storycast-config}}, {secretRef: {name: storycast-secrets}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: storycast-renderer}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: storycast-renderer}}
+  template:
+    metadata: {labels: {app: storycast-renderer}}
+    spec:
+      containers:
+        - name: rendering
+          image: ghcr.io/your-org/storycast:latest
+          command: [celery, -A, app.tasks.celery_app.celery_app, worker, -Q, rendering, --loglevel=INFO, --concurrency=1]
+          envFrom: [{configMapRef: {name: storycast-config}}, {secretRef: {name: storycast-secrets}}]
+          resources: {requests: {cpu: "1", memory: 2Gi}, limits: {cpu: "4", memory: 8Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: storycast-beat}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: storycast-beat}}
+  template:
+    metadata: {labels: {app: storycast-beat}}
+    spec:
+      containers:
+        - name: beat
+          image: ghcr.io/your-org/storycast:latest
+          command: [celery, -A, app.tasks.celery_app.celery_app, beat, --loglevel=INFO]
+          envFrom: [{configMapRef: {name: storycast-config}}, {secretRef: {name: storycast-secrets}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: storycast-web}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: storycast-web}}
+  template:
+    metadata: {labels: {app: storycast-web}}
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/your-org/storycast-web:latest
+          ports: [{containerPort: 3000}]
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 500m, memory: 512Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: storycast-web}
+spec: {selector: {app: storycast-web}, ports: [{port: 80, targetPort: 3000}]}

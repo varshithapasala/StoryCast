@@ -1,0 +1,36 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "StoryCastBucketMetadata",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+      "Resource": "arn:aws:s3:::YOUR_STORYCAST_BUCKET"
+    },
+    {
+      "Sid": "StoryCastMediaObjects",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::YOUR_STORYCAST_BUCKET/*"
+    },
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "PullStoryCastImages",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage"
+      ],
+      "Resource": [
+        "arn:aws:ecr:YOUR_REGION:YOUR_AWS_ACCOUNT_ID:repository/storycast-backend",
+        "arn:aws:ecr:YOUR_REGION:YOUR_AWS_ACCOUNT_ID:repository/storycast-frontend"
+      ]
+    }
+  ]
+}

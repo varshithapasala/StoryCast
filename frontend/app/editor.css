@@ -1,0 +1,5 @@
+.scene-edit textarea { height: 100px; }
+.scene-edit > div { display: grid; gap: 12px; }
+.scene-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.check { display: flex; align-items: center; gap: 8px; }
+.check input { width: auto; }
